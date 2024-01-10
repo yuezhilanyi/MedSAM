@@ -276,8 +276,12 @@ def main():
     img_mask_encdec_params = list(medsam_model.image_encoder.parameters()) + list(
         medsam_model.mask_decoder.parameters()
     )
+    # https://discuss.pytorch.org/t/adam-half-precision-nans/1765/4
+    # @Adam Paszke
+    eps = 1e-04 if args.use_fp16 else 1e-08
     optimizer = torch.optim.AdamW(
-        img_mask_encdec_params, lr=args.lr, weight_decay=args.weight_decay
+        img_mask_encdec_params, lr=args.lr, weight_decay=args.weight_decay, 
+        eps=eps
     )
     print(
         "Number of image encoder and mask decoder parameters: ",
@@ -323,7 +327,7 @@ def main():
                 ## AMP
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
                     medsam_pred = medsam_model(image, boxes_np)
-                    loss = seg_loss(medsam_pred, gt2D) + ce_loss(
+                    loss = seg_loss(medsam_pred, gt2D.float()) + ce_loss(
                         medsam_pred, gt2D.float()
                     )
                 scaler.scale(loss).backward()
@@ -332,13 +336,21 @@ def main():
                 optimizer.zero_grad()
             else:
                 medsam_pred = medsam_model(image, boxes_np)
-                loss = seg_loss(medsam_pred, gt2D) + ce_loss(medsam_pred, gt2D.float())
+                loss = seg_loss(medsam_pred, gt2D.float()) + \
+                    ce_loss(medsam_pred, gt2D.float())
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
 
             epoch_loss += loss.item()
             iter_num += 1
+
+            # adding this debug info can find nan losses early!
+            if iter_num % 1000 == 0:
+                print(
+                    f'Time: {datetime.now().strftime("%Y%m%d-%H%M")}, \
+                      Epoch: {epoch}, Loss: {epoch_loss / step}'
+                )
 
         epoch_loss /= step
         losses.append(epoch_loss)
