@@ -75,6 +75,7 @@ def prepareTanzaniaImageDataset(y_size=1024, x_size=1024, total_numbers=10000):
     with open("dataset.txt", 'w') as fp:
         for img_path, gt_path in zip(img_path_files, gt_path_files):
             rst = rasterio.open(img_path)
+            gt = rasterio.open(gt_path)
             height = rst.meta['height']
             width = rst.meta['width']
             for y in range(0, height, y_size):
@@ -86,6 +87,10 @@ def prepareTanzaniaImageDataset(y_size=1024, x_size=1024, total_numbers=10000):
                     # image = rst.read(window=Window(x, y, x_size, y_size))
                     # c, h, w = image.shape
                     # assert(h!=0 and w!=0), (img_path, c, h, w, y, x, height, width)
-                    fp.write(img_path + ',' + gt_path + ',' + str(y) + ',' + str(x) + '\n')
+                    label = gt.read(window=Window(x, y, x_size, y_size))
+                    if label.max() > 0:
+                        fp.write(img_path + ',' + gt_path + ',' + str(y) + ',' + str(x) + '\n')
 
 prepareTanzaniaImageDataset()
+
+# %%
